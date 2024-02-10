@@ -68,7 +68,7 @@ def load_last_indexed_id():
         return 0  # ファイルが存在しない場合は0から始める
 
 def main():
-    config = load_config('config.yml')
+    config = load_config('./.config/config.yml')
     meilisearch_config = config['meilisearch']
 
     last_indexed_id = load_last_indexed_id()
@@ -84,7 +84,7 @@ def main():
 
                 notes = [format_note(note) for note in fetched_notes]
                 send_notes_to_meilisearch(notes, meilisearch_config)
-                last_indexed_id = notes[-1]['id']  
+                last_indexed_id = notes[-1]['id']
                 save_last_indexed_id(last_indexed_id)
 
     finally:
