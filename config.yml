@@ -1,0 +1,13 @@
+
+postgresql:
+  host: localhost
+  user: misskey-user
+  password: password
+  database: misskey
+  port: 5432
+
+meilisearch:
+  host: your-host
+  port: your-port
+  api_key: your-api-key
+  index: your-index

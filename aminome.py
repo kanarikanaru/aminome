@@ -1,67 +1,96 @@
-# Register local notes on Misskey to Meilisearch
 import psycopg2
 import psycopg2.extras
 import orjson
 import requests
-from datetime import datetime
+import yaml
 
-# postgresql config
-db = psycopg2.connect(
-    host='localhost',
-    user='misskey-user',
-    password='password',
-    database='misskey',
-    port=5432,
-    cursor_factory=psycopg2.extras.DictCursor
-)
+def load_config(file_path):
+    with open(file_path, 'r') as file:
+        return yaml.safe_load(file)
 
-# meilisearch config
-api_key = "APIKEY"
-index = ""
-url = f"http://localhost:7700/indexes/{index}---notes/documents?primaryKey=id"
-headers = {
-    "Content-Type": "application/json",
-    "Authorization": f"Bearer {api_key}"
-}
+def connect_to_database(db_config):
+    return psycopg2.connect(
+        host=db_config['host'],
+        user=db_config['user'],
+        password=db_config['password'],
+        database=db_config['database'],
+        port=db_config['port'],
+        cursor_factory=psycopg2.extras.DictCursor
+    )
 
-# decode unixtimestamp (include milliseconds) from aid.
-# ref. https://github.com/misskey-dev/misskey/blob/4b295088fd6b4bead05087537415b10419eee78f/packages/backend/src/misc/id/aid.ts#L34
+# ノートを昇順で取得するためのクエリの変更
+def fetch_notes(cursor, last_indexed_id):
+    query = (
+        'SELECT "id", "userId", "userHost", "channelId", "cw", "text", "tags" FROM "note" '
+        'WHERE ("note"."visibility" = 'public' OR "note"."visibility" = 'home') AND '
+        '"note"."id" > %s '
+        'ORDER BY "note"."id" ASC LIMIT 1000'
+    )
+    cursor.execute(query, (last_indexed_id,))
+    return cursor.fetchall()
+
+def send_notes_to_meilisearch(notes, meilisearch_config):
+    if not notes:
+        return
+
+    url = f"http://{meilisearch_config['host']}:{meilisearch_config['port']}/indexes/{meilisearch_config['index']}---notes/documents?primaryKey=id"
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {meilisearch_config['api_key']}"}
+    response = requests.post(url, data=orjson.dumps(notes), headers=headers)
+    if response.status_code not in [200, 202]:
+        raise Exception(f"Error sending data to Meilisearch: {response.text}")
+
 def parse_aid(id):
     TIME2000 = 946684800000
     t = int(int(id[:8], 36) + TIME2000)
     return t
 
-lmt = 100000
-ofs = 0
+def format_note(note):
+    return {
+        'id': note['id'],
+        'text': note['text'],
+        'createdAt': parse_aid(note['id']),
+        'userId': note['userId'],
+        'userHost': note['userHost'],
+        'channelId': note['channelId'],
+        'cw': note['cw'],
+        'tags': note['tags']
+    }
 
-notes = []
+# 最後にインデックスしたノートのIDを保存する
+def save_last_indexed_id(id):
+    with open('last_indexed_id.txt', 'w') as file:
+        file.write(str(id))
 
-while True:
-    with db.cursor() as cur:
-        cur.execute('SELECT "id", "userId", "userHost", "channelId", "cw", "text", "tags" FROM "note" \
-                    WHERE ("note"."visibility" = \'public\' OR "note"."visibility" = \'home\') AND\
-                    ("note"."text" IS NOT NULL) AND\
-                    ("note"."uri" IS NULL) \
-                    LIMIT '  + str(lmt) + ' OFFSET ' + str(ofs))
-        qnotes = cur.fetchall()
-        if not qnotes:
-            break
-    for note in qnotes:
-        notes.append({
-            'id': note['id'],
-            'text': note['text'],
-            'createdAt': parse_aid(note['id']),
-            'userId': note['userId'],
-            'userHost': note['userHost'],
-            'channelId': note['channelId'],
-            'cw': note['cw'],
-            'text': note['text'],
-            'tags': note['tags']
-        })
-    print(f'{ofs=} {lmt=} {len(notes)=}')
-    response = requests.post(url, data=orjson.dumps(notes), headers=headers)
-    print(response.content)
-    notes = []
-    ofs = ofs + lmt
+# 最後にインデックスしたノートのIDを読み込む
+def load_last_indexed_id():
+    try:
+        with open('last_indexed_id.txt', 'r') as file:
+            return int(file.read())
+    except FileNotFoundError:
+        return 0  # ファイルが存在しない場合は0から始める
 
-db.close()
+def main():
+    config = load_config('config.yml')
+    meilisearch_config = config['meilisearch']
+
+    last_indexed_id = load_last_indexed_id()
+
+    db = connect_to_database(config['postgresql'])
+
+    try:
+        with db.cursor() as cursor:
+            while True:
+                fetched_notes = fetch_notes(cursor, last_indexed_id)
+                if not fetched_notes:
+                    break
+
+                notes = [format_note(note) for note in fetched_notes]
+                send_notes_to_meilisearch(notes, meilisearch_config)
+                last_indexed_id = notes[-1]['id']  # 最後のノートのIDを更新
+                save_last_indexed_id(last_indexed_id)
+
+    finally:
+        db.close()
+
+if __name__ == "__main__":
+    main()
