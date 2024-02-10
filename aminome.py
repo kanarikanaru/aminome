@@ -18,7 +18,7 @@ def connect_to_database(db_config):
         cursor_factory=psycopg2.extras.DictCursor
     )
 
-# ノートを昇順で取得するためのクエリの変更
+# 定期的に実行するためノートを昇順で取得する
 def fetch_notes(cursor, last_indexed_id):
     query = (
         'SELECT "id", "userId", "userHost", "channelId", "cw", "text", "tags" FROM "note" '
@@ -32,7 +32,7 @@ def fetch_notes(cursor, last_indexed_id):
 def send_notes_to_meilisearch(notes, meilisearch_config):
     if not notes:
         return
-
+    # TODO httpsへの対応
     url = f"http://{meilisearch_config['host']}:{meilisearch_config['port']}/indexes/{meilisearch_config['index']}---notes/documents?primaryKey=id"
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {meilisearch_config['api_key']}"}
     response = requests.post(url, data=orjson.dumps(notes), headers=headers)
@@ -56,12 +56,10 @@ def format_note(note):
         'tags': note['tags']
     }
 
-# 最後にインデックスしたノートのIDを保存する
 def save_last_indexed_id(id):
     with open('last_indexed_id.txt', 'w') as file:
         file.write(str(id))
 
-# 最後にインデックスしたノートのIDを読み込む
 def load_last_indexed_id():
     try:
         with open('last_indexed_id.txt', 'r') as file:
@@ -86,7 +84,7 @@ def main():
 
                 notes = [format_note(note) for note in fetched_notes]
                 send_notes_to_meilisearch(notes, meilisearch_config)
-                last_indexed_id = notes[-1]['id']  # 最後のノートのIDを更新
+                last_indexed_id = notes[-1]['id']  
                 save_last_indexed_id(last_indexed_id)
 
     finally:
