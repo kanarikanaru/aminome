@@ -4,9 +4,11 @@ import orjson
 import requests
 import yaml
 
+
 def load_config(file_path):
     with open(file_path, 'r') as file:
         return yaml.safe_load(file)
+
 
 def connect_to_database(db_config):
     return psycopg2.connect(
@@ -18,16 +20,18 @@ def connect_to_database(db_config):
         cursor_factory=psycopg2.extras.DictCursor
     )
 
+
 # 定期的に実行するためノートを昇順で取得する
 def fetch_notes(cursor, last_indexed_id):
     query = (
         'SELECT "id", "userId", "userHost", "channelId", "cw", "text", "tags" FROM "note" '
         'WHERE ("note"."visibility" = \'public\' OR "note"."visibility" = \'home\') AND '
         '"note"."id" > %s '
-        'ORDER BY "note"."id" ASC LIMIT 100000'
+        'ORDER BY "note"."id" LIMIT 100000'
     )
     cursor.execute(query, (last_indexed_id,))
     return cursor.fetchall()
+
 
 def send_notes_to_meilisearch(notes, meilisearch_config):
     if not notes:
@@ -39,10 +43,12 @@ def send_notes_to_meilisearch(notes, meilisearch_config):
     if response.status_code not in [200, 202]:
         raise Exception(f"Error sending data to Meilisearch: {response.text}")
 
+
 def parse_aid(id):
     TIME2000 = 946684800000
-    t = int(int(id[:8], 36) + TIME2000)
+    t = str(int(int(id[:8], 36) + TIME2000))
     return t
+
 
 def format_note(note):
     return {
@@ -56,16 +62,19 @@ def format_note(note):
         'tags': note['tags']
     }
 
+
 def save_last_indexed_id(id):
     with open('last_indexed_id.txt', 'w') as file:
         file.write(str(id))
 
+
 def load_last_indexed_id():
     try:
         with open('last_indexed_id.txt', 'r') as file:
-            return int(file.read())
+            return str(file.read())
     except FileNotFoundError:
-        return 0  # ファイルが存在しない場合は0から始める
+        return '0'  # ファイルが存在しない場合は0から始める
+
 
 def main():
     config = load_config('./.config/config.yml')
@@ -89,6 +98,7 @@ def main():
 
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     main()
