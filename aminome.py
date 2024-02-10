@@ -24,7 +24,7 @@ def fetch_notes(cursor, last_indexed_id):
         'SELECT "id", "userId", "userHost", "channelId", "cw", "text", "tags" FROM "note" '
         'WHERE ("note"."visibility" = 'public' OR "note"."visibility" = 'home') AND '
         '"note"."id" > %s '
-        'ORDER BY "note"."id" ASC LIMIT 1000'
+        'ORDER BY "note"."id" ASC LIMIT 100000'
     )
     cursor.execute(query, (last_indexed_id,))
     return cursor.fetchall()
