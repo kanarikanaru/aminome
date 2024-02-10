@@ -5,5 +5,4 @@ orjson~=3.9.10
 psycopg2-binary
 requests~=2.31.0
 urllib3
-yaml~=0.2.5
-pyyaml~=6.0.1
+pyyaml
