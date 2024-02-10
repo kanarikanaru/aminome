@@ -22,7 +22,7 @@ def connect_to_database(db_config):
 def fetch_notes(cursor, last_indexed_id):
     query = (
         'SELECT "id", "userId", "userHost", "channelId", "cw", "text", "tags" FROM "note" '
-        'WHERE ("note"."visibility" = 'public' OR "note"."visibility" = 'home') AND '
+        'WHERE ("note"."visibility" = \'public\' OR "note"."visibility" = \'home\') AND '
         '"note"."id" > %s '
         'ORDER BY "note"."id" ASC LIMIT 100000'
     )
